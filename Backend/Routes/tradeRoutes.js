@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Trade = require("../Models/Trade");
 
-// Create a new trade
+// 1. Create a new trade
 router.post("/", async (req, res) => {
     try {
         const newTrade = new Trade(req.body);
@@ -11,16 +11,18 @@ router.post("/", async (req, res) => {
     } catch (err) {
         res.status(400).json({ message: err.message });
     }   
-
 });
 
-// Get all trades for a user
+// 2. Get trades for a specific user
 router.get("/user/:userId", async (req, res) => {
     try {
-        const trades = await Trade.find({ userId: req.params.userId });
+        console.log("Fetching trades for user:", req.params.userId);
+        const trades = await Trade.find({ userId: req.params.userId }).sort({ entryTime: -1 });
         res.json(trades);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        console.error("Fetch Error:", err);
+        res.status(500).json({ error: err.message });
     }
-}); 
+});
+
 module.exports = router;

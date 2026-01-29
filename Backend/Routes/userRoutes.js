@@ -1,16 +1,14 @@
 const express = require("express");
 const router = express.Router();
-const User = require("../Models/User");
+const userController = require("../Controllers/userController");
 
-// Create a new user
-router.post("/", async (req, res) => {
-    try {
-        const newUser = new User(req.body);
-        const savedUser = await newUser.save();
-        res.status(201).json(savedUser);
-    } catch (err) {
-        res.status(400).json({ message: err.message });
-    }
-});
+// POST /api/users - Create user
+router.post("/", userController.createUser);
+
+// GET /api/users - Get all users
+router.get("/", userController.getAllUsers);
+
+// GET /api/users/:id - Get specific user
+router.get("/:id", userController.getUserById);
 
 module.exports = router;
