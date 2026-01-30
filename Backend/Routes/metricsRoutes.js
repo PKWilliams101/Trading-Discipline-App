@@ -1,8 +1,7 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const metricsController = require('../Controllers/metricsController');
+const metricsController = require("../Controllers/metricsController");
 
-// GET /api/metrics/:userId
-router.get('/:userId', metricsController.getUserMetrics);
+router.get("/:userId", metricsController.getUserMetrics);
 
 module.exports = router;

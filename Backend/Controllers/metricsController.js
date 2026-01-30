@@ -6,17 +6,16 @@ exports.getUserMetrics = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        // 1. Fetch all trades for this user
+        // 1️⃣ Fetch all trades for this user
         const trades = await Trade.find({ userId });
 
-        // 2. Fetch user profile (planned daily limit)
+        // 2️⃣ Fetch user profile
         const user = await User.findById(userId);
-
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // 3. Calculate behavioural metrics
+        // 3️⃣ Calculate behavioural metrics FIRST
         const metrics = {
             disciplineScore: metricsService.calculateAverageDisciplineScore(trades),
             overtradingIndex: metricsService.calculateOvertradingIndex(
@@ -29,7 +28,14 @@ exports.getUserMetrics = async (req, res) => {
             totalTrades: trades.length
         };
 
-        res.status(200).json(metrics);
+        // 4️⃣ Generate warnings USING the metrics
+        const warnings = metricsService.generateBehaviourWarnings(metrics);
+
+        // 5️⃣ Return everything
+        res.status(200).json({
+            ...metrics,
+            warnings
+        });
 
     } catch (error) {
         res.status(500).json({

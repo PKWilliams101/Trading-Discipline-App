@@ -1,86 +1,150 @@
-// DISCIPLINE SCORE (Per Trade)
-// Measures rule adherence, emotional control, and risk discipline
+/**
+ * Behavioural Metrics Service
+ * All metrics are derived from observable trading behaviour
+ * (No subjective inputs required)
+ */
+
+// ===============================
+// 1. DISCIPLINE SCORE (PER TRADE)
+// ===============================
+// Measures plan adherence + risk control
 exports.calculateDisciplineScore = (trade) => {
-    let score = 100;
+  let score = 100;
 
-    if (!trade.followedPlan) score -= 30;
-    if (!trade.riskWithinLimit) score -= 25;
-    if (trade.revengeTrade) score -= 25;
+  // Broke trading plan
+  if (!trade.followedPlan) score -= 40;
 
-    const riskyEmotions = ["angry", "frustrated", "anxious"];
-    if (riskyEmotions.includes(trade.emotion)) {
-        score -= 20;
-    }
+  // Excessive risk-taking penalty
+  if (trade.riskPercentage > 2) score -= 30;
 
-    return Math.max(score, 0);
+  // Emotional proxy: large loss + rule break
+  if (!trade.followedPlan && trade.pnl < 0) score -= 20;
+
+  return Math.max(score, 0);
 };
-// Average Discipline Score across all trades
+
+// =====================================
+// 2. AVERAGE DISCIPLINE SCORE (AGGREGATE)
+// =====================================
 exports.calculateAverageDisciplineScore = (trades) => {
-    if (!trades || trades.length === 0) return 0;
+  if (!trades || trades.length === 0) return 0;
 
-    const scores = trades.map(trade =>
-        exports.calculateDisciplineScore(trade)
-    );
+  const total = trades.reduce(
+    (sum, trade) => sum + exports.calculateDisciplineScore(trade),
+    0
+  );
 
-    const average =
-        scores.reduce((sum, s) => sum + s, 0) / scores.length;
-
-    return Math.round(average);
+  return Math.round(total / trades.length);
 };
 
-
-
-
-
-//OVERTRADING IDEX (Impulsivitity Control)
+// =================================
+// 3. OVERTRADING INDEX
+// =================================
+// Impulsivity / over-execution metric
 exports.calculateOvertradingIndex = (trades, plannedDailyLimit) => {
-    if (!trades || plannedDailyLimit === 0) return 0;
-    return parseFloat((trades.length / plannedDailyLimit).toFixed(2));
+  if (!trades || plannedDailyLimit === 0) return 0;
+  return Number((trades.length / plannedDailyLimit).toFixed(2));
 };
 
-//DISPOSITION RATIO//
-// Measures the tendency to hold onto losing trades versus winning trades
+// =================================
+// 4. DISPOSITION RATIO
+// =================================
+// Holding losers longer than winners
 exports.calculateDispositionRatio = (trades) => {
-    const winners = trades.filter(t => t.result === 'win' || t.pnl >0);
-    const losers = trades.filter(t => t.result === 'loss' || t.pnl <0);
+  const winners = trades.filter(t => t.pnl > 0);
+  const losers = trades.filter(t => t.pnl < 0);
 
-    if (winners.length === 0 || losers.length === 0) return 1.0;
+  if (winners.length === 0 || losers.length === 0) return 1;
 
-    const avgWinDuration = winners.reduce((acc, t) => acc + (new Date(t.exitTime) - new Date(t.entryTime)), 0) / winners.length;
-    const avgLossDuration = losers.reduce((acc, t) => acc + (new Date(t.exitTime) - new Date(t.entryTime)), 0) / losers.length;
+  const avgWinDuration =
+    winners.reduce((sum, t) =>
+      sum + (new Date(t.exitTime) - new Date(t.entryTime)), 0
+    ) / winners.length;
 
-    return parseFloat((avgLossDuration / avgWinDuration).toFixed(2));
+  const avgLossDuration =
+    losers.reduce((sum, t) =>
+      sum + (new Date(t.exitTime) - new Date(t.entryTime)), 0
+    ) / losers.length;
+
+  return Number((avgLossDuration / avgWinDuration).toFixed(2));
 };
 
-// 4. House Money Factor
+// =================================
+// 5. HOUSE MONEY EFFECT
+// =================================
+// Risk increase after wins
 exports.calculateHouseMoneyFactor = (trades) => {
-    // Check if we have at least 2 trades to compare
-    if (!trades || trades.length < 2) return 1.0;
-    
-    const sorted = [...trades].sort((a, b) => new Date(b.entryTime) - new Date(a.entryTime));
-    const lastTrade = sorted[0];
-    const previousTrade = sorted[1];
+  if (!trades || trades.length < 2) return 1;
 
-    // Added a check to ensure previousTrade and its result exist
-    if (previousTrade && previousTrade.result === 'win') {
-        return parseFloat((lastTrade.riskPercentage / previousTrade.riskPercentage).toFixed(2));
-    }
-    return 1.0;
+  const sorted = [...trades].sort(
+    (a, b) => new Date(b.entryTime) - new Date(a.entryTime)
+  );
+
+  const last = sorted[0];
+  const previous = sorted[1];
+
+  if (previous.result === "win") {
+    return Number(
+      (last.riskPercentage / previous.riskPercentage).toFixed(2)
+    );
+  }
+
+  return 1;
 };
 
-// 5. Loss-Reactivity
+// =================================
+// 6. LOSS REACTIVITY
+// =================================
+// Revenge trading detection
 exports.calculateLossReactivity = (trades) => {
-    if (!trades || trades.length < 2) return "Stable";
-    
-    const sorted = [...trades].sort((a, b) => new Date(a.entryTime) - new Date(b.entryTime));
-    const last = sorted[sorted.length - 1];
-    const prev = sorted[sorted.length - 2];
+  if (!trades || trades.length < 2) return "Stable";
 
-    // Added check for 'prev' existence and its 'result'
-    if (prev && prev.result === 'loss') {
-        const gapInMinutes = (new Date(last.entryTime) - new Date(prev.exitTime)) / 60000;
-        if (gapInMinutes < 10) return "High (Potential Revenge Trading)";
-    }
-    return "Stable";
+  const sorted = [...trades].sort(
+    (a, b) => new Date(a.entryTime) - new Date(b.entryTime)
+  );
+
+  const prev = sorted[sorted.length - 2];
+  const last = sorted[sorted.length - 1];
+
+  if (prev.result === "loss") {
+    const gapMinutes =
+      (new Date(last.entryTime) - new Date(prev.exitTime)) / 60000;
+
+    if (gapMinutes < 10) return "High";
+  }
+
+  return "Stable";
 };
+// =================================
+// 7. BEHAVIOURAL WARNINGS GENERATOR
+// =================================
+// Converts raw metrics into human-readable feedback
+exports.generateBehaviourWarnings = (metrics) => {
+  const warnings = [];
 
+  if (metrics.disciplineScore < 70) {
+    warnings.push("Low discipline score detected. Frequent rule violations may be affecting performance.");
+  }
+
+  if (metrics.overtradingIndex > 1.2) {
+    warnings.push("Overtrading behaviour detected. Trade frequency exceeds planned limits.");
+  }
+
+  if (metrics.dispositionRatio > 1.5) {
+    warnings.push("Disposition effect detected. Losing trades are being held longer than winning trades.");
+  }
+
+  if (metrics.houseMoneyFactor > 1.3) {
+    warnings.push("House money effect detected. Risk-taking has increased following winning trades.");
+  }
+
+  if (metrics.lossReactivity === "High") {
+    warnings.push("High loss reactivity detected. Trades are being placed too quickly after losses.");
+  }
+
+  if (warnings.length === 0) {
+    warnings.push("No significant behavioural risks detected. Trading behaviour appears stable.");
+  }
+
+  return warnings;
+};

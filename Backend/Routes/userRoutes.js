@@ -2,13 +2,13 @@ const express = require("express");
 const router = express.Router();
 const userController = require("../Controllers/userController");
 
-// POST /api/users - Create user
-router.post("/", userController.createUser);
+// AUTH ROUTES
+router.post("/register", userController.createUser); // Register
+router.post("/login", userController.loginUser);     // Login
 
-// GET /api/users - Get all users
-router.get("/", userController.getAllUsers);
-
-// GET /api/users/:id - Get specific user
-router.get("/:id", userController.getUserById);
+// PROFILE ROUTES
+router.get("/", userController.getAllUsers);         // Get all (Debug)
+router.get("/:id", userController.getUserById);      // Get Profile
+router.put("/:id/strategy", userController.updateUserStrategy); // Update Settings
 
 module.exports = router;
