@@ -1,237 +1,193 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const TradeExecutionWizard = ({ userId, onTradeSuccess, currentHistory, user }) => {
-    // ============================================================
-    // 1. DEFINE ALL HOOKS FIRST (Must be at the very top)
-    // ============================================================
-    const [phase, setPhase] = useState('PRE_FLIGHT'); 
+const TradeExecutionWizard = ({ userId, onTradeSuccess, currentHistory, user, onClose }) => {
+    const [phase, setPhase] = useState('PRE_FLIGHT');
     const [instrument, setInstrument] = useState('');
     const [direction, setDirection] = useState('buy');
-    
-    // Dynamic Checklist State
     const [checkedRules, setCheckedRules] = useState({});
-
     const [entryTime, setEntryTime] = useState(null);
     const [pnl, setPnl] = useState('');
     const [mood, setMood] = useState('Neutral');
     const [followedPlan, setFollowedPlan] = useState(true);
+    const [notes, setNotes] = useState('');
+    const [loading, setLoading] = useState(false); // New: Prevent double submission
 
-    // ============================================================
-    // 2. NOW WE DO THE SAFETY CHECK
-    // ============================================================
-    // If user is null, we return early, but AFTER hooks are defined.
-    if (!user) {
-        return <div className="card">Loading User Strategy...</div>;
-    }
+    if (!user) return null;
 
-    // ============================================================
-    // 3. LOGIC THAT DEPENDS ON 'USER'
-    // ============================================================
-    const MAX_TRADES = user.plannedDailyLimit || 3;
+    // --- LOGIC: CALCULATE LIMITS ---
+    const MAX_TRADES = Number(user.plannedDailyLimit || 3);
     const rulesList = user.tradingPlanRules || [];
-
-    // Count today's trades
-    // Safely handle currentHistory if it's undefined
     const history = currentHistory || [];
-    const tradesToday = history.filter(t => {
-        const d = new Date(t.entryTime);
-        const n = new Date();
-        return d.getDate() === n.getDate() && d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
-    }).length;
+
+    const todayStr = new Date().toDateString();
+    const tradesToday = history.filter(t => 
+        new Date(t.entryTime || t.timestamp).toDateString() === todayStr
+    ).length;
 
     const tradesRemaining = MAX_TRADES - tradesToday;
 
-    // --- STEP 1: START TRADE VALIDATION ---
+    // --- HANDLERS ---
     const handleStartTrade = () => {
-        if (!instrument) { alert("Please enter an asset"); return; }
-        
-        // 1. Check if all Dynamic Rules are ticked
+        if (!instrument) return alert("Please enter an asset");
+
         const ticks = Object.values(checkedRules).filter(val => val === true).length;
-        const totalRules = rulesList.length;
-
-        // "Friction" Logic
-        if (totalRules > 0 && ticks < totalRules) { 
-            if(!window.confirm(`⚠️ WARNING: You have only checked ${ticks}/${totalRules} of your rules. Are you sure you want to force this trade?`)) {
-                return;
-            }
+        if (rulesList.length > 0 && ticks < rulesList.length) {
+            const confirmRules = window.confirm(`⚠️ CONFLUENCE WARNING: You only checked ${ticks}/${rulesList.length} rules.\n\nTrading without full confluence reduces your edge. Force trade anyway?`);
+            if (!confirmRules) return;
         }
 
-        // 2. Overtrading Logic
         if (tradesRemaining <= 0) {
-            alert(`🛑 STOP: You have reached your daily limit of ${MAX_TRADES} trades.`);
-            return;
+            const confirmOvertrade = window.confirm(`🛑 OVERTRADE WARNING: You have used all ${MAX_TRADES} daily trades.\n\nThis will spike your Impulsivity Index. Are you sure you want to proceed?`);
+            if (!confirmOvertrade) return;
         }
 
-        // 3. Go Live
         setEntryTime(new Date());
         setPhase('LIVE');
     };
 
-    // --- STEP 2: CLOSE TRADE ---
     const handleCloseTrade = async () => {
-        if (!pnl) { alert("Please enter the result (PnL)"); return; }
-
+        if (!pnl) return alert("Please enter the final PnL");
+        
+        setLoading(true);
+        const numPnL = Number(pnl);
+        
         const tradeData = {
             userId: user._id,
             instrument,
             direction,
             entryTime,
             exitTime: new Date(),
-            pnl: Number(pnl),
-            result: Number(pnl) > 0 ? 'win' : 'loss',
+            pnl: numPnL,
+            result: numPnL > 0 ? 'win' : numPnL < 0 ? 'loss' : 'breakeven',
             followedPlan,
             mood,
-            riskPercentage: 1
+            notes,
+            riskPercentage: 1 
         };
 
         try {
             await axios.post('http://localhost:5000/api/trades', tradeData);
-            alert("✅ Trade Journaled!");
-            if (onTradeSuccess) onTradeSuccess();
             
-            // Reset Wizard
-            setPhase('PRE_FLIGHT');
-            setInstrument('');
-            setPnl('');
-            setCheckedRules({}); 
+            // --- THE FIX: TRIGGER BOTH SUCCESS AND CLOSE ---
+            if (onTradeSuccess) onTradeSuccess(); // Refreshes Dashboard
+            if (onClose) onClose();               // Physically closes the modal
+            
         } catch (err) {
-            alert("Error saving trade: " + err.message);
+            console.error("Save Error:", err);
+            alert("Save failed. Please check your database connection.");
+        } finally {
+            setLoading(false);
         }
     };
 
-    // ============================================
-    // VIEW 1: PRE-FLIGHT (DYNAMIC)
-    // ============================================
-    if (phase === 'PRE_FLIGHT') {
-        return (
-            <div className="card" style={{ borderTop: '4px solid #0052cc' }}>
-                <h3 style={{ marginTop: 0 }}>✈️ Pre-Trade Checklist</h3>
-                
-                {/* STATUS BAR */}
-                <div style={{ marginBottom: '15px', padding:'10px', background:'#f4f5f7', borderRadius:'4px', fontSize:'13px' }}>
-                    <span style={{marginRight:'15px'}}>Daily Limit: <strong>{MAX_TRADES}</strong></span>
-                    <span>Remaining: <strong style={{ color: tradesRemaining > 0 ? 'green' : 'red' }}>{tradesRemaining}</strong></span>
-                </div>
+    // --- MODERN UI STYLES ---
+    const styles = {
+        overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+        card: { backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '480px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative' },
+        closeX: { position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8', lineHeight: '1' },
+        header: { fontSize: '20px', fontWeight: '800', color: '#0f172a', marginBottom: '24px' },
+        banner: { backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', marginBottom: '24px', fontSize: '13px' },
+        label: { display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' },
+        input: { width: '100%', backgroundColor: '#f1f5f9', border: '1px solid transparent', borderRadius: '8px', padding: '12px 16px', fontSize: '14px', color: '#1e293b', outline: 'none', marginBottom: '20px', boxSizing: 'border-box' },
+        btnNavy: { backgroundColor: '#0f172a', color: 'white', padding: '14px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', width: '100%', opacity: loading ? 0.7 : 1 },
+        btnGhost: { backgroundColor: 'white', border: '1px solid #e2e8f0', color: '#475569', padding: '14px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', width: '100%' },
+        checkItem: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '8px', border: '1px solid #f1f5f9', marginBottom: '8px', cursor: 'pointer' }
+    };
 
-                {/* ASSET INPUTS */}
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                    <input placeholder="Asset (e.g. BTC)" value={instrument} onChange={e => setInstrument(e.target.value)} style={{ flex: 1 }} />
-                    <select value={direction} onChange={e => setDirection(e.target.value)}>
-                        <option value="buy">Long (Buy)</option>
-                        <option value="sell">Short (Sell)</option>
-                    </select>
-                </div>
+    return (
+        <div style={styles.overlay}>
+            <div style={styles.card}>
+                <button style={styles.closeX} onClick={onClose}>&times;</button>
 
-                {/* DYNAMIC RULES LIST */}
-                <h4 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#6b778c' }}>Confirm Your Rules</h4>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-                    {rulesList.length === 0 ? (
-                        <p style={{fontStyle:'italic', color:'#999'}}>No rules defined. Go to "Strategy Settings" to add your checklist.</p>
-                    ) : (
-                        rulesList.map((rule, index) => (
-                            <label key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor:'pointer' }}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={!!checkedRules[index]} 
-                                    onChange={(e) => setCheckedRules({ ...checkedRules, [index]: e.target.checked })} 
-                                />
-                                <span>{rule}</span>
-                            </label>
-                        ))
-                    )}
-                </div>
+                {phase === 'PRE_FLIGHT' && (
+                    <>
+                        <div style={styles.header}>✈️ Pre-Trade Checklist</div>
+                        <div style={styles.banner}>
+                            <span>Daily Limit: <strong>{MAX_TRADES}</strong></span>
+                            <span style={{ color: tradesRemaining <= 0 ? '#ef4444' : '#10b981' }}>
+                                Remaining: <strong>{tradesRemaining}</strong>
+                            </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '12px' }}>
+                            <div>
+                                <label style={styles.label}>Asset / Symbol</label>
+                                <input style={styles.input} placeholder="e.g. BTC/USD" value={instrument} onChange={e => setInstrument(e.target.value)} />
+                            </div>
+                            <div>
+                                <label style={styles.label}>Side</label>
+                                <select style={styles.input} value={direction} onChange={e => setDirection(e.target.value)}>
+                                    <option value="buy">Long (Buy)</option>
+                                    <option value="sell">Short (Sell)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <label style={styles.label}>Check Your Rules</label>
+                        <div style={{ maxHeight: '180px', overflowY: 'auto', marginBottom: '24px' }}>
+                            {rulesList.map((rule, i) => (
+                                <label key={i} style={styles.checkItem}>
+                                    <input type="checkbox" style={{ width: '18px', height: '18px', accentColor: '#0f172a' }} checked={!!checkedRules[i]} onChange={e => setCheckedRules({...checkedRules, [i]: e.target.checked})} />
+                                    <span style={{ fontSize: '14px', color: '#334155' }}>{rule}</span>
+                                </label>
+                            ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button style={styles.btnGhost} onClick={onClose}>Cancel</button>
+                            <button style={styles.btnNavy} onClick={handleStartTrade}>Enter Trade</button>
+                        </div>
+                    </>
+                )}
 
-                <button 
-                    onClick={handleStartTrade} 
-                    className="btn-primary" 
-                    style={{ width: '100%', background: tradesRemaining > 0 ? '#0052cc' : '#ccc' }}
-                    disabled={tradesRemaining <= 0}
-                >
-                    ENTER TRADE EXECUTION MODE ➔
-                </button>
+                {phase === 'LIVE' && (
+                    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                        <div style={{ backgroundColor: '#f0fdf4', color: '#16a34a', padding: '6px 14px', borderRadius: '20px', fontSize: '11px', fontWeight: '800', display: 'inline-block', marginBottom: '16px' }}>POSITION ACTIVE</div>
+                        <h2 style={{ fontSize: '36px', fontWeight: '800', margin: '0 0 8px 0', letterSpacing: '-1px' }}>{instrument}</h2>
+                        <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '32px', fontStyle: 'italic' }}>"Stick to the plan. Markets reward discipline."</p>
+                        <button style={{ ...styles.btnNavy, backgroundColor: '#ef4444' }} onClick={() => setPhase('POST_MORTEM')}>🛑 Close Position</button>
+                    </div>
+                )}
+
+                {phase === 'POST_MORTEM' && (
+                    <>
+                        <div style={styles.header}>📝 Trade Debrief</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '12px' }}>
+                            <div>
+                                <label style={styles.label}>PnL ($)</label>
+                                <input style={styles.input} type="number" placeholder="e.g. 150" value={pnl} onChange={e => setPnl(e.target.value)} autoFocus />
+                            </div>
+                            <div>
+                                <label style={styles.label}>Emotion</label>
+                                <select style={styles.input} value={mood} onChange={e => setMood(e.target.value)}>
+                                    <option value="Neutral">😐 Neutral</option>
+                                    <option value="Anxious">😰 Anxious</option>
+                                    <option value="Greedy">🤑 Greedy</option>
+                                    <option value="Angry">😡 Angry</option>
+                                </select>
+                            </div>
+                        </div>
+                        <label style={styles.label}>Reflective Notes</label>
+                        <textarea 
+                            style={{ ...styles.input, height: '80px', resize: 'none', paddingTop: '12px' }} 
+                            placeholder="Why did you exit?" 
+                            value={notes} 
+                            onChange={e => setNotes(e.target.value)} 
+                        />
+                        <label style={{ ...styles.checkItem, backgroundColor: '#f8fafc' }}>
+                            <input type="checkbox" checked={followedPlan} onChange={e => setFollowedPlan(e.target.checked)} />
+                            <span style={{ fontSize: '14px', fontWeight: '700' }}>I followed my rules</span>
+                        </label>
+                        <button 
+                            style={styles.btnNavy} 
+                            onClick={handleCloseTrade}
+                            disabled={loading}
+                        >
+                            {loading ? 'SAVING TO JOURNAL...' : 'Save Journal Entry'}
+                        </button>
+                    </>
+                )}
             </div>
-        );
-    }
-
-    // ============================================
-    // VIEW 2: LIVE TRADE (MONITORING)
-    // ============================================
-    if (phase === 'LIVE') {
-        return (
-            <div className="card" style={{ borderTop: '4px solid #36b37e', backgroundColor: '#e3fcef', textAlign: 'center', padding: '40px' }}>
-                <h2 style={{ color: '#006644', marginTop: 0 }}>🟢 TRADE IS ACTIVE</h2>
-                <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>
-                    {instrument} ({direction.toUpperCase()})
-                </div>
-
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '2px solid #36b37e', marginBottom: '30px' }}>
-                    <h4 style={{ margin: '0 0 10px 0', color: '#6b778c' }}>PSYCHOLOGY ANCHOR</h4>
-                    <p style={{ fontSize: '18px', fontWeight: 'bold', color:'#172b4d' }}>
-                        "Stick to the plan."<br/>
-                        "Accept the risk you have taken."
-                    </p>
-                </div>
-
-                <p style={{ color: '#666', fontSize:'13px' }}>Do not close this window until you exit the trade.</p>
-                
-                <button 
-                    onClick={() => setPhase('POST_MORTEM')} 
-                    style={{ 
-                        backgroundColor: '#ff5630', color: 'white', border: 'none', 
-                        padding: '15px 30px', borderRadius: '6px', fontSize: '16px', 
-                        fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                    }}
-                >
-                    🛑 CLOSE TRADE
-                </button>
-            </div>
-        );
-    }
-
-    // ============================================
-    // VIEW 3: POST-MORTEM (JOURNALING)
-    // ============================================
-    if (phase === 'POST_MORTEM') {
-        return (
-            <div className="card" style={{ borderTop: '4px solid #ff5630' }}>
-                <h3>📝 Trade Debrief</h3>
-                
-                <div style={{ marginBottom: '20px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Final PnL ($)</label>
-                    <input 
-                        type="number" 
-                        placeholder="e.g. 100 or -50" 
-                        value={pnl} 
-                        onChange={e => setPnl(e.target.value)} 
-                        style={{ width: '100%', fontSize: '18px', padding: '10px' }}
-                        autoFocus
-                    />
-                </div>
-
-                <div style={{ marginBottom: '20px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Emotion During Trade</label>
-                    <select value={mood} onChange={e => setMood(e.target.value)} style={{ width: '100%', padding: '10px' }}>
-                        <option value="Neutral">😐 Neutral / Calm</option>
-                        <option value="Anxious">😰 Anxious / Scared</option>
-                        <option value="Greedy">🤑 Greedy / FOMO</option>
-                        <option value="Angry">😡 Angry / Frustrated</option>
-                        <option value="Euphoric">🤩 Euphoric / Overconfident</option>
-                    </select>
-                </div>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', padding:'10px', background:'#f4f5f7', borderRadius:'6px' }}>
-                    <input type="checkbox" checked={followedPlan} onChange={e => setFollowedPlan(e.target.checked)} />
-                    <span><strong>I followed my exit rules</strong> (regardless of win/loss)</span>
-                </label>
-
-                <button onClick={handleCloseTrade} className="btn-primary" style={{ width: '100%' }}>
-                    SAVE TO JOURNAL ➔
-                </button>
-            </div>
-        );
-    }
+        </div>
+    );
 };
 
 export default TradeExecutionWizard;

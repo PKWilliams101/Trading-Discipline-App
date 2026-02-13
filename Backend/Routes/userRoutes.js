@@ -1,14 +1,29 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const userController = require("../Controllers/userController");
+const User = require('../Models/User');
 
-// AUTH ROUTES
-router.post("/register", userController.createUser); // Register
-router.post("/login", userController.loginUser);     // Login
+// --- THE FIX FOR "SYSTEM SYNC FAILED" ---
+// This path MUST match your axios.put URL
+router.put('/:id', async (req, res) => {
+  try {
+    const { tradingPlanRules, plannedDailyLimit } = req.body;
+    
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { tradingPlanRules, plannedDailyLimit },
+      { new: true } // This ensures the frontend gets the NEW data back
+    );
 
-// PROFILE ROUTES
-router.get("/", userController.getAllUsers);         // Get all (Debug)
-router.get("/:id", userController.getUserById);      // Get Profile
-router.put("/:id/strategy", userController.updateUserStrategy); // Update Settings
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    console.log("✅ Strategy Synchronized for:", updatedUser.username);
+    res.json(updatedUser);
+  } catch (err) {
+    console.error("❌ Sync Error:", err.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
 module.exports = router;

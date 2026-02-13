@@ -20,7 +20,11 @@ const TradeSchema = new mongoose.Schema(
       enum: ["buy", "sell"],
       required: true
     },
-
+    mood: {
+      type: String,
+      enum: ["Neutral", "Anxious", "Greedy", "Angry", "Euphoric"],
+      default: "Neutral"
+    },
     riskPercentage: {
       type: Number,
       required: true,

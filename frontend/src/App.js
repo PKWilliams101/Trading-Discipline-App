@@ -1,147 +1,109 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css'; 
+import { Brain, LayoutDashboard, BookOpen, Settings, LogOut, Zap } from 'lucide-react';
 
-import TradeExecutionWizard from './components/TradeExecutionWizard'; 
+import LoginScreen from './components/LoginScreen';
 import BehaviouralFeedbackPanel from './components/BehaviouralFeedbackPanel';
+import TradeExecutionWizard from './components/TradeExecutionWizard';
 import StrategySettings from './components/StrategySettings';
+import { ReflectiveJournal } from './components/ReflectiveJournal';
 
 function App() {
-  // 1. INITIALIZE STATE FROM LOCAL STORAGE (The "Remember Me" Logic)
-  const [user, setUser] = useState(() => {
-      const savedUser = localStorage.getItem('trading_user');
-      return savedUser ? JSON.parse(savedUser) : null;
-  });
-
+  const [user, setUser] = useState(null);
   const [view, setView] = useState('dashboard');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  
+  const [showWizard, setShowWizard] = useState(false);
   const [tradeHistory, setTradeHistory] = useState([]);
   const [metrics, setMetrics] = useState(null);
 
-  // 2. AUTO-SAVE TO LOCAL STORAGE
-  // Whenever 'user' changes (Login, Update Strategy, or Logout), save it!
   useEffect(() => {
-      if (user) {
-          localStorage.setItem('trading_user', JSON.stringify(user));
-      } else {
-          localStorage.removeItem('trading_user');
-      }
-  }, [user]);
+    const storedUser = localStorage.getItem('user');
+    if (storedUser && storedUser !== "undefined") {
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      fetchTradeHistory(parsedUser._id);
+    }
+  }, []);
 
-  // 3. FETCH DATA (Only if user exists)
-  const fetchData = async () => {
-    if (!user) return;
+  const fetchTradeHistory = async (userId) => {
+    if (!userId) return;
     try {
-        const historyRes = await axios.get(`http://localhost:5000/api/trades/user/${user._id}`);
-        setTradeHistory(historyRes.data);
-        const metricsRes = await axios.get(`http://localhost:5000/api/trades/metrics/${user._id}`);
-        setMetrics(metricsRes.data);
-    } catch (err) { console.error(err); }
+      const [tradesRes, metricsRes] = await Promise.all([
+        axios.get(`http://localhost:5000/api/trades/user/${userId}`),
+        axios.get(`http://localhost:5000/api/trades/metrics/${userId}`)
+      ]);
+      setTradeHistory(tradesRes.data || []); 
+      setMetrics(metricsRes.data || {});
+    } catch (err) {
+      console.error("Sync Error:", err);
+    }
   };
 
-  // Run fetch when user loads (including on refresh!)
-  useEffect(() => { 
-      if(user) fetchData(); 
-  }, [user]);
-
-  // LOGIN HANDLER
-  const handleLogin = async (e) => {
-      e.preventDefault();
-      try {
-          const res = await axios.post('http://localhost:5000/api/users/login', { email, password });
-          setUser(res.data); // This triggers the useEffect above to save to localStorage
-      } catch (err) {
-          alert("Login Failed: " + (err.response?.data?.message || err.message));
-      }
+  const handleLoginSuccess = (userData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+    fetchTradeHistory(userData._id);
   };
 
-  // REGISTER HANDLER
-  const handleRegister = async () => {
-      try {
-          const res = await axios.post('http://localhost:5000/api/users/register', { email, password, username: "Trader" });
-          alert("Registered! Now Login.");
-      } catch (err) { alert(err.message); }
-  };
-
-  // LOGOUT HANDLER
   const handleLogout = () => {
-      if(window.confirm("Are you sure you want to logout?")) {
-          setUser(null); // This triggers useEffect to remove from localStorage
-          setView('dashboard');
-          setTradeHistory([]);
-          setMetrics(null);
-      }
+    setUser(null);
+    localStorage.removeItem('user');
+    setTradeHistory([]);
+    setMetrics(null);
   };
 
-  // --- IF NOT LOGGED IN, SHOW LOGIN PAGE ---
-  if (!user) {
-      return (
-          <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'#f4f5f7' }}>
-              <div className="card" style={{ width: '300px', textAlign: 'center' }}>
-                  <h2>🔐 Trader Login</h2>
-                  <input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} style={{width:'100%', marginBottom:'10px'}}/>
-                  <input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} style={{width:'100%', marginBottom:'20px'}}/>
-                  <button onClick={handleLogin} className="btn-primary" style={{width:'100%', marginBottom:'10px'}}>Login</button>
-                  <button onClick={handleRegister} style={{background:'none', border:'none', color:'blue', cursor:'pointer'}}>No account? Register</button>
-              </div>
-          </div>
-      );
-  }
+  if (!user) return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
 
-  // --- LOGGED IN APP ---
   return (
-    <div className="dashboard-container">
-      <header className="header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <div>
-            <h1 style={{margin:0}}>Welcome, {user.username}</h1>
-            <p style={{margin:0}}>Strategy: <strong>{user.tradingStrategy?.name || "Default"}</strong></p>
+    <div className="app-container" style={{ backgroundColor: '#F8FAFC', minHeight: '100vh' }}>
+      <header style={{ background: '#FFF', borderBottom: '1px solid #E2E8F0', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.02)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ background: '#0F172A', padding: '8px', borderRadius: '10px' }}>
+            <Brain size={22} color="#3B82F6" />
+          </div>
+          <div>
+            <span style={{ display: 'block', fontSize: '16px', fontWeight: '900', color: '#0F172A' }}>COGNITIVE</span>
+            <span style={{ display: 'block', fontSize: '10px', fontWeight: '800', color: '#64748B', letterSpacing: '2px' }}>FIREWALL</span>
+          </div>
         </div>
-        <div>
-            <button onClick={() => setView('dashboard')} style={{ marginRight:'10px', padding:'8px', cursor:'pointer' }}>Dashboard</button>
-            <button onClick={() => setView('settings')} style={{ marginRight:'10px', padding:'8px', cursor:'pointer' }}>Strategy Settings</button>
-            <button onClick={handleLogout} style={{ padding:'8px', background:'#ffebe6', color:'red', border:'1px solid red', cursor:'pointer' }}>Logout</button>
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={() => setShowWizard(true)} style={{ background: '#10B981', color: '#FFF', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Zap size={16} fill="white" /> EXECUTE TRADE
+          </button>
+          <button onClick={handleLogout} style={{ background: '#FFF', color: '#64748B', border: '1px solid #E2E8F0', padding: '10px 16px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <LogOut size={16} /> Logout
+          </button>
         </div>
       </header>
 
-      {/* VIEW SWITCHER */}
-      {view === 'settings' ? (
-          <StrategySettings user={user} onUpdateUser={setUser} />
-      ) : (
-          <>
-            <BehaviouralFeedbackPanel data={metrics} />
-            <div className="form-container">
-                {/* ⚠️ PASS USER SO WIZARD DOESN'T CRASH */}
-                <TradeExecutionWizard 
-                    userId={user._id} 
-                    onTradeSuccess={fetchData} 
-                    currentHistory={tradeHistory}
-                    user={user} 
-                />
-            </div>
-            
-            {/* TABLE */}
-            <div className="table-container">
-                <table className="trade-table">
-                  <thead><tr><th>Date</th><th>Asset</th><th>Result</th><th>PnL</th><th>Plan</th></tr></thead>
-                  <tbody>
-                    {tradeHistory.map(t => (
-                      <tr key={t._id}>
-                        <td>{new Date(t.entryTime).toLocaleDateString()}</td>
-                        <td>{t.instrument}</td>
-                        <td><span className={`badge ${t.result==='win'?'badge-win':'badge-loss'}`}>{t.result}</span></td>
-                        <td>{t.pnl}</td>
-                        <td>{t.followedPlan ? '✅' : '❌'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-            </div>
-          </>
+      <div style={{ padding: '30px 32px 0 32px' }}>
+        <nav style={{ display: 'flex', gap: '10px', background: '#F1F5F9', padding: '5px', borderRadius: '12px', width: 'fit-content' }}>
+          <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutDashboard size={16}/>} label="Dashboard" />
+          <NavButton active={view === 'strategy'} onClick={() => setView('strategy')} icon={<Settings size={16}/>} label="Strategy" />
+          <NavButton active={view === 'journal'} onClick={() => setView('journal')} icon={<BookOpen size={16}/>} label="Journal" />
+        </nav>
+      </div>
+
+      <main style={{ padding: '32px' }}>
+        {view === 'dashboard' && <BehaviouralFeedbackPanel user={user} data={metrics} trades={tradeHistory} />}
+        {view === 'strategy' && <StrategySettings user={user} onUpdate={setUser} />}
+        {view === 'journal' && <ReflectiveJournal trades={tradeHistory} userId={user._id} onTradeLogged={() => fetchTradeHistory(user._id)} />}
+      </main>
+
+      {showWizard && (
+        <div className="wizard-overlay">
+          <TradeExecutionWizard userId={user._id} user={user} onClose={() => setShowWizard(false)} onTradeSuccess={() => fetchTradeHistory(user._id)} />
+        </div>
       )}
     </div>
   );
 }
+
+const NavButton = ({ active, onClick, icon, label }) => (
+  <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', background: active ? '#FFF' : 'transparent', color: active ? '#0F172A' : '#64748B', fontWeight: active ? '700' : '600', boxShadow: active ? '0 2px 5px rgba(0,0,0,0.05)' : 'none' }}>
+    {icon} {label}
+  </button>
+);
 
 export default App;

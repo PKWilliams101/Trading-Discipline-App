@@ -1,3 +1,4 @@
+const User = require("../Models/User");
 const express = require("express");
 const router = express.Router();
 const Trade = require("../Models/Trade"); // ✅ Keeps your original Capital M
@@ -25,35 +26,41 @@ router.get("/user/:userId", async (req, res) => {
     }
 });
 
-// 3. GET METRICS
-// This is the logic that calculates the 50% / 100% score
+// GET /api/trades/metrics/:userId
 router.get("/metrics/:userId", async (req, res) => {
     try {
-        console.log("🧮 Calculating Metrics for:", req.params.userId);
         const trades = await Trade.find({ userId: req.params.userId });
-        
-        // Safety check for 0 trades
-        if (trades.length === 0) {
-            return res.json({ disciplineScore: 0, dispositionRatio: 0, warnings: [] });
+        const user = await User.findById(req.params.userId); // This was causing the error
+
+        if (!trades || !user) {
+            return res.json({ disciplineScore: 0, overtradingIndex: "0.00", dispositionRatio: "0.00" });
         }
 
-        // --- MATH LOGIC ---
-        // A. Discipline Score
+        // 1. Discipline Score
         const disciplinedCount = trades.filter(t => t.followedPlan === true).length;
-        const disciplineScore = Math.round((disciplinedCount / trades.length) * 100);
+        const disciplineScore = trades.length > 0 
+            ? Math.round((disciplinedCount / trades.length) * 100) 
+            : 0;
 
-        // B. Disposition Ratio
+        // 2. Impulsivity (Overtrading) Index
+        const today = new Date().setHours(0, 0, 0, 0);
+        const tradesToday = trades.filter(t => new Date(t.entryTime).setHours(0, 0, 0, 0) === today).length;
+        const limit = user.plannedDailyLimit || 3;
+        const overtradingIndex = (tradesToday / limit).toFixed(2);
+
+        // 3. Disposition Ratio
         const wins = trades.filter(t => t.pnl > 0);
-        const losses = trades.filter(t => t.pnl <= 0);
-        const avgWin = wins.length > 0 ? (wins.reduce((a, b) => a + b.pnl, 0) / wins.length) : 0;
-        const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((a, b) => a + b.pnl, 0) / losses.length) : 1;
+        const losses = trades.filter(t => t.pnl < 0);
+        const avgWin = wins.length > 0 ? (wins.reduce((sum, t) => sum + t.pnl, 0) / wins.length) : 0;
+        const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((sum, t) => sum + t.pnl, 0) / losses.length) : 1;
         const dispositionRatio = (avgWin / avgLoss).toFixed(2);
 
-        // Send results back to Frontend
         res.json({ 
             disciplineScore, 
+            overtradingIndex, 
             dispositionRatio,
-            warnings: disciplineScore < 50 ? ["Low Discipline Detected"] : []
+            revengeRisk: disciplineScore < 50 ? 80 : 10, // Example logic
+            houseMoneyFactor: "1.00"
         });
 
     } catch (err) {
@@ -61,5 +68,4 @@ router.get("/metrics/:userId", async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 });
-
 module.exports = router;
