@@ -17,14 +17,18 @@ const TradeSchema = new mongoose.Schema(
 
     direction: {
       type: String,
-      enum: ["buy", "sell"],
+      // Expanded to match both the Trade Wizard ('buy'/'sell') and the Journal ('Long'/'Short')
+      enum: ["buy", "sell", "Long", "Short"],
       required: true
     },
+    
     mood: {
       type: String,
-      enum: ["Neutral", "Anxious", "Greedy", "Angry", "Euphoric"],
+      // Expanded to perfectly match all frontend UI emotional states
+      enum: ["Neutral", "Anxious", "Greedy", "Angry", "Euphoric", "Calm", "Calm & Collected", "Confident"],
       default: "Neutral"
     },
+    
     riskPercentage: {
       type: Number,
       required: true,

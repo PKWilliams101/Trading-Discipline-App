@@ -1,9 +1,9 @@
 const User = require("../Models/User");
 const express = require("express");
 const router = express.Router();
-const Trade = require("../Models/Trade"); // ✅ Keeps your original Capital M
+const Trade = require("../Models/Trade"); 
 
-// 1. CREATE TRADE (Your Original Code)
+// 1. CREATE TRADE
 router.post("/", async (req, res) => {
     try {
         const newTrade = new Trade(req.body);
@@ -14,7 +14,7 @@ router.post("/", async (req, res) => {
     }   
 });
 
-// 2. GET TRADES (Your Original Code)
+// 2. GET TRADES
 router.get("/user/:userId", async (req, res) => {
     try {
         console.log("Fetching trades for user:", req.params.userId);
@@ -26,29 +26,51 @@ router.get("/user/:userId", async (req, res) => {
     }
 });
 
-// GET /api/trades/metrics/:userId
+// 3. GET METRICS (Calculates Revenge Risk, Discipline, etc.)
 router.get("/metrics/:userId", async (req, res) => {
     try {
-        const trades = await Trade.find({ userId: req.params.userId });
-        const user = await User.findById(req.params.userId); // This was causing the error
+        const trades = await Trade.find({ userId: req.params.userId }).sort({ entryTime: 1 }); 
+        const user = await User.findById(req.params.userId);
 
         if (!trades || !user) {
-            return res.json({ disciplineScore: 0, overtradingIndex: "0.00", dispositionRatio: "0.00" });
+            return res.json({ disciplineScore: 100, overtradingIndex: "0.00", dispositionRatio: "0.00", revengeRisk: 0 });
         }
 
-        // 1. Discipline Score
+        // --- Discipline Score ---
         const disciplinedCount = trades.filter(t => t.followedPlan === true).length;
         const disciplineScore = trades.length > 0 
             ? Math.round((disciplinedCount / trades.length) * 100) 
-            : 0;
+            : 100;
 
-        // 2. Impulsivity (Overtrading) Index
+        // --- Impulsivity (Overtrading) Index ---
         const today = new Date().setHours(0, 0, 0, 0);
         const tradesToday = trades.filter(t => new Date(t.entryTime).setHours(0, 0, 0, 0) === today).length;
         const limit = user.plannedDailyLimit || 3;
         const overtradingIndex = (tradesToday / limit).toFixed(2);
 
-        // 3. Disposition Ratio
+        // --- REVENGE RISK LOGIC ---
+        let revengeRisk = 0;
+        const recentTrades = [...trades].slice(-5); 
+
+        recentTrades.forEach((trade, index) => {
+            if (trade.pnl < 0) {
+                let heat = 20; 
+                const previousTrade = recentTrades[index - 1];
+                if (previousTrade) {
+                    const timeDiff = (new Date(trade.entryTime) - new Date(previousTrade.entryTime)) / 60000;
+                    if (timeDiff < 15) { 
+                        heat *= 2; // Rapid fire penalty
+                    }
+                }
+                revengeRisk += heat;
+            } else if (trade.pnl > 0) {
+                revengeRisk -= 10; // Success cools the tilt
+            }
+        });
+
+        revengeRisk = Math.max(0, Math.min(100, revengeRisk));
+
+        // --- Disposition Ratio ---
         const wins = trades.filter(t => t.pnl > 0);
         const losses = trades.filter(t => t.pnl < 0);
         const avgWin = wins.length > 0 ? (wins.reduce((sum, t) => sum + t.pnl, 0) / wins.length) : 0;
@@ -59,7 +81,7 @@ router.get("/metrics/:userId", async (req, res) => {
             disciplineScore, 
             overtradingIndex, 
             dispositionRatio,
-            revengeRisk: disciplineScore < 50 ? 80 : 10, // Example logic
+            revengeRisk, 
             houseMoneyFactor: "1.00"
         });
 
@@ -68,4 +90,6 @@ router.get("/metrics/:userId", async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 });
+
+
 module.exports = router;

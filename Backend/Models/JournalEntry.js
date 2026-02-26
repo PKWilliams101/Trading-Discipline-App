@@ -20,13 +20,34 @@ const JournalEntrySchema = new mongoose.Schema({
         required: true
     },
 
+    // --- NEW: Cognitive Metrics ---
+    // Captures the state of the "Firewall" when the user journaled
+    disciplineScoreAtEntry: {
+        type: Number,
+        default: 100
+    },
+
+    revengeRiskAtEntry: {
+        type: Number,
+        default: 0
+    },
+
+    // --- Contextual Trading Data ---
+    sessionType: {
+        type: String,
+        enum: ['PRE-MARKET', 'IN-TRADE', 'POST-MARKET', 'BREAK'],
+        default: 'POST-MARKET'
+    },
+
     notes: {
         type: String,
     },
 
-    Timestamp: {
+    // Fixed 'Timestamp' to lowercase 'timestamp' (standard JS convention)
+    timestamp: {
         type: Date,
         default: Date.now
     }
 }); 
+
 module.exports = mongoose.model("JournalEntry", JournalEntrySchema);

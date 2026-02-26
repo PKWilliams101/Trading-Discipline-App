@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { FileText, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
+import { FileText, TrendingUp, TrendingDown, Calendar, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
+import PageWrapper from './PageWrapper';
 
 export function ReflectiveJournal({ trades, userId, onTradeLogged }) {
   const [showForm, setShowForm] = useState(false);
@@ -21,7 +22,7 @@ export function ReflectiveJournal({ trades, userId, onTradeLogged }) {
         result: Number(formData.pnl) > 0 ? 'win' : 'loss',
         followedPlan: formData.followedPlan === 'yes',
         mood: formData.emotionalState,
-        notes: formData.notes, // New field for backend
+        notes: formData.notes,
         entryTime: new Date(),
         exitTime: new Date(),
         riskPercentage: 1
@@ -36,119 +37,202 @@ export function ReflectiveJournal({ trades, userId, onTradeLogged }) {
     }
   };
 
-  // Helper for Emotion Badge Color
+  // Helper for Emotion Badge Color using CSS Variables where possible
   const getEmotionColor = (mood) => {
     const map = {
-      'Calm': '#3B82F6', // Blue
-      'Confident': '#10B981', // Green
-      'Anxious': '#F59E0B', // Yellow
-      'Greedy': '#EF4444', // Red
-      'Angry': '#EF4444'
+      'Calm': '#0052CC', // Deep Blue
+      'Confident': 'var(--primary)', // Green
+      'Anxious': 'var(--warning)', // Orange/Yellow
+      'Greedy': 'var(--danger)', // Red
+      'Angry': 'var(--danger)' // Red
     };
-    return map[mood] || '#6B778C';
+    return map[mood] || 'var(--text-muted)';
   };
 
   return (
-    <div className="space-y-6">
-      
-      {/* HEADER */}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-        <div>
-          <h2 style={{fontSize:'1.5rem', fontWeight:'700', margin:0}}>Reflective Trading Journal</h2>
-          <p style={{color:'#6B778C', margin:'5px 0 0 0'}}>Analyse your emotional state and plan adherence</p>
-        </div>
-        <button className="btn" style={{background:'black', color:'white'}} onClick={() => setShowForm(!showForm)}>
-          <FileText size={16} /> New Entry
-        </button>
-      </div>
-
-      {/* NEW ENTRY FORM (Toggleable) */}
-      {showForm && (
-        <div className="card" style={{ borderTop: '4px solid #36B37E', animation: 'slideDown 0.3s' }}>
-          <h3 style={{margin:'0 0 20px 0'}}>Log New Trade</h3>
-          <div className="grid-3">
-            <div><label style={{fontWeight:600}}>Asset</label><input className="input" placeholder="NVDA" value={formData.asset} onChange={e => setFormData({...formData, asset: e.target.value})} /></div>
-            <div><label style={{fontWeight:600}}>PnL ($)</label><input className="input" type="number" placeholder="100" value={formData.pnl} onChange={e => setFormData({...formData, pnl: e.target.value})} /></div>
-            <div><label style={{fontWeight:600}}>Direction</label>
-              <select className="select" value={formData.direction} onChange={e => setFormData({...formData, direction: e.target.value})}>
-                <option>Long</option><option>Short</option>
-              </select>
-            </div>
-            <div><label style={{fontWeight:600}}>Plan Adherence</label>
-              <select className="select" value={formData.followedPlan} onChange={e => setFormData({...formData, followedPlan: e.target.value})}>
-                <option value="yes">Followed Plan</option><option value="no">Broke Rules</option>
-              </select>
-            </div>
-            <div><label style={{fontWeight:600}}>Emotion</label>
-              <select className="select" value={formData.emotionalState} onChange={e => setFormData({...formData, emotionalState: e.target.value})}>
-                <option>Calm</option><option>Confident</option><option>Anxious</option><option>Greedy</option><option>Angry</option>
-              </select>
-            </div>
-            <div><label style={{fontWeight:600}}>Notes</label><input className="input" placeholder="Why did you take this trade?" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} /></div>
+    <PageWrapper>
+      <div style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '40px' }}>
+        
+        {/* HEADER */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+          <div>
+            <h2 style={{ fontSize: '28px', fontWeight: '900', color: 'var(--text-main)', margin: 0 }}>Reflective Trading Journal</h2>
+            <p style={{ color: 'var(--text-muted)', margin: '8px 0 0 0', fontSize: '14px' }}>Analyze your emotional state, plan adherence, and execution psychology.</p>
           </div>
-          <div style={{marginTop:'20px', textAlign:'right'}}>
-            <button className="btn btn-primary" onClick={handleSubmit}>Save Trade Log</button>
-          </div>
+          <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
+            <FileText size={16} /> {showForm ? 'Cancel Entry' : 'Log Manual Trade'}
+          </button>
         </div>
-      )}
 
-      <h4 style={{margin:'10px 0', color:'#6B778C'}}>Trade History ({trades.length})</h4>
-
-      {/* TRADE LIST */}
-      <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
-        {trades.length === 0 ? <div className="card" style={{textAlign:'center', color:'#999'}}>No trades recorded yet.</div> : 
-         trades.slice().reverse().map((t) => (
-          <div key={t._id} className="card" style={{ 
-            padding: '20px', 
-            borderLeft: `6px solid ${t.pnl > 0 ? '#10B981' : '#EF4444'}`, // Green/Red Border
-            display: 'grid',
-            gridTemplateColumns: '1fr 2fr',
-            gap: '20px',
-            alignItems: 'start'
-          }}>
-            {/* Left Col: Asset & Stats */}
-            <div>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'start'}}>
-                <div>
-                   <h3 style={{margin:0, fontSize:'1.2rem', fontWeight:'800'}}>{t.instrument || 'ASSET'}</h3>
-                   <div style={{color:'#6B778C', fontSize:'0.85rem', marginTop:'4px'}}>
-                     {t.direction} • {new Date(t.entryTime).toLocaleDateString()}
-                   </div>
-                </div>
-                <div style={{textAlign:'right'}}>
-                   <div style={{fontWeight:'700', fontSize:'1.2rem', color: t.pnl > 0 ? '#10B981' : '#EF4444', display:'flex', alignItems:'center', gap:'5px'}}>
-                     {t.pnl > 0 ? <TrendingUp size={18}/> : <TrendingDown size={18}/>}
-                     {t.pnl > 0 ? '+' : ''}{t.pnl.toFixed(2)}
-                   </div>
-                   <div style={{fontSize:'0.75rem', color:'#999', textTransform:'uppercase'}}>P&L</div>
-                </div>
-              </div>
-
-              <div style={{marginTop:'15px'}}>
-                <div style={{fontSize:'0.85rem', color:'#666'}}>Risk: <span style={{fontWeight:'600', color:'#172B4D'}}>$100</span></div>
+        {/* NEW ENTRY FORM (Toggleable) */}
+        {showForm && (
+          <div className="card" style={{ borderTop: '4px solid var(--primary)', marginBottom: '30px' }}>
+            <h3 style={{ margin: '0 0 24px 0', fontSize: '18px', color: 'var(--text-main)' }}>Log Manual Execution</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+              
+              <div>
+                <label style={formLabel}>Asset / Ticker</label>
+                <input style={formInput} placeholder="e.g. BTC/USD" value={formData.asset} onChange={e => setFormData({...formData, asset: e.target.value})} />
               </div>
               
-              <div style={{display:'flex', gap:'8px', marginTop:'12px'}}>
-                 <span style={{background:'#172B4D', color:'white', padding:'4px 10px', borderRadius:'12px', fontSize:'0.75rem', fontWeight:'600'}}>
-                   {t.followedPlan ? 'Followed Plan' : 'Rule Break'}
-                 </span>
-                 <span style={{background: getEmotionColor(t.mood), color:'white', padding:'4px 10px', borderRadius:'12px', fontSize:'0.75rem', fontWeight:'600'}}>
-                   {t.mood || 'Neutral'}
-                 </span>
+              <div>
+                <label style={formLabel}>PnL ($)</label>
+                <input style={formInput} type="number" placeholder="e.g. 150 or -50" value={formData.pnl} onChange={e => setFormData({...formData, pnl: e.target.value})} />
               </div>
+              
+              <div>
+                <label style={formLabel}>Direction</label>
+                <select style={formInput} value={formData.direction} onChange={e => setFormData({...formData, direction: e.target.value})}>
+                  <option>Long</option>
+                  <option>Short</option>
+                </select>
+              </div>
+              
+              <div>
+                <label style={formLabel}>Plan Adherence</label>
+                <select style={formInput} value={formData.followedPlan} onChange={e => setFormData({...formData, followedPlan: e.target.value})}>
+                  <option value="yes">Followed Plan Perfectly</option>
+                  <option value="no">Violated Trading Rules</option>
+                </select>
+              </div>
+              
+              <div>
+                <label style={formLabel}>Emotional State</label>
+                <select style={formInput} value={formData.emotionalState} onChange={e => setFormData({...formData, emotionalState: e.target.value})}>
+                  <option>Calm</option>
+                  <option>Confident</option>
+                  <option>Anxious</option>
+                  <option>Greedy</option>
+                  <option>Angry</option>
+                </select>
+              </div>
+              
+              <div style={{ gridColumn: 'span 3' }}>
+                <label style={formLabel}>Reflective Notes (Required)</label>
+                <textarea 
+                  style={{ ...formInput, minHeight: '80px', resize: 'vertical' }} 
+                  placeholder="Why did you take this trade? What were you thinking? Were there any emotional triggers?" 
+                  value={formData.notes} 
+                  onChange={e => setFormData({...formData, notes: e.target.value})} 
+                />
+              </div>
+              
             </div>
-
-            {/* Right Col: Reflection Notes */}
-            <div style={{borderLeft:'1px solid #EBECF0', paddingLeft:'20px', height:'100%'}}>
-              <h4 style={{margin:'0 0 8px 0', fontSize:'0.9rem', color:'#6B778C'}}>Reflection Notes</h4>
-              <p style={{margin:0, fontSize:'0.95rem', lineHeight:'1.5', color:'#172B4D'}}>
-                {t.notes || "No reflection notes added for this trade."}
-              </p>
+            
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-primary" onClick={handleSubmit}>Save to Ledger</button>
             </div>
-
           </div>
-        ))}
+        )}
+
+        {/* TRADE LIST SECTION */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '16px', fontWeight: '700' }}>Execution History</h4>
+          <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)', background: 'var(--surface)', padding: '6px 12px', borderRadius: '20px', border: '1px solid var(--border)' }}>
+            {trades.length} Entries Logged
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {trades.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '60px 20px', fontSize: '14px', fontStyle: 'italic' }}>
+              No trades recorded yet. Start logging your executions to build your behavioral profile.
+            </div>
+          ) : (
+            trades.slice().reverse().map((t) => (
+              <div key={t._id} className="card" style={{ 
+                padding: '24px', 
+                borderLeft: `6px solid ${t.pnl > 0 ? 'var(--primary)' : 'var(--danger)'}`, 
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 2fr',
+                gap: '32px',
+                alignItems: 'start'
+              }}>
+                
+                {/* Left Col: Asset & Stats */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '20px' }}>
+                    <div>
+                       <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: 'var(--text-main)' }}>{t.instrument || 'ASSET'}</h3>
+                       <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '4px', fontWeight: '600' }}>
+                         <span style={{ textTransform: 'uppercase' }}>{t.direction}</span> • {new Date(t.entryTime).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                       </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                       <div style={{ fontWeight: '800', fontSize: '20px', color: t.pnl > 0 ? 'var(--primary)' : 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                         {t.pnl > 0 ? <TrendingUp size={20}/> : <TrendingDown size={20}/>}
+                         {t.pnl > 0 ? '+' : ''}${Math.abs(t.pnl).toFixed(2)}
+                       </div>
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
+                     <span style={{ 
+                       background: t.followedPlan ? 'rgba(54, 179, 126, 0.1)' : 'rgba(255, 86, 48, 0.1)', 
+                       color: t.followedPlan ? 'var(--primary)' : 'var(--danger)', 
+                       padding: '6px 12px', 
+                       borderRadius: '6px', 
+                       fontSize: '11px', 
+                       fontWeight: '800',
+                       border: `1px solid ${t.followedPlan ? 'rgba(54, 179, 126, 0.2)' : 'rgba(255, 86, 48, 0.2)'}`
+                     }}>
+                       {t.followedPlan ? '✓ FOLLOWED PLAN' : '⚠ RULE VIOLATION'}
+                     </span>
+                     <span style={{ 
+                       background: getEmotionColor(t.mood), 
+                       color: 'white', 
+                       padding: '6px 12px', 
+                       borderRadius: '6px', 
+                       fontSize: '11px', 
+                       fontWeight: '800'
+                     }}>
+                       {t.mood ? t.mood.toUpperCase() : 'NEUTRAL'}
+                     </span>
+                  </div>
+                </div>
+
+                {/* Right Col: Reflection Notes */}
+                <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '32px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <Calendar size={14} color="var(--text-muted)" />
+                    <h4 style={{ margin: 0, fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', letterSpacing: '1px', textTransform: 'uppercase' }}>Reflection Notes</h4>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.6', color: 'var(--text-main)', fontStyle: t.notes ? 'normal' : 'italic', opacity: t.notes ? 1 : 0.6 }}>
+                    {t.notes || "No reflection notes added for this execution."}
+                  </p>
+                </div>
+
+              </div>
+            ))
+          )}
+        </div>
+
       </div>
-    </div>
+    </PageWrapper>
   );
 }
+
+// Inline styling helpers for the form
+const formLabel = {
+  display: 'block',
+  fontSize: '11px',
+  fontWeight: '800',
+  color: 'var(--text-muted)',
+  marginBottom: '8px',
+  letterSpacing: '1px',
+  textTransform: 'uppercase'
+};
+
+const formInput = {
+  width: '100%',
+  padding: '12px 16px',
+  borderRadius: '8px',
+  border: '1px solid var(--border)',
+  background: 'var(--background)',
+  color: 'var(--text-main)',
+  fontSize: '14px',
+  fontWeight: '500',
+  outline: 'none',
+  transition: 'border 0.2s',
+  boxSizing: 'border-box'
+};

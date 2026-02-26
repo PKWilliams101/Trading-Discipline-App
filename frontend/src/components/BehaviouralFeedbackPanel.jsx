@@ -1,240 +1,184 @@
 import React from 'react';
-import { Target, Activity, Brain, TrendingUp, Shield, ShieldAlert, Clock, ChevronRight, Zap } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
+import { Target, Activity, Brain, TrendingUp, ShieldCheck, AlertTriangle, DollarSign, Percent } from 'lucide-react';
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+import PageWrapper from './PageWrapper';
 
-export default function BehaviouralFeedbackPanel({ user, data, trades }) {
-    // 1. DATA MAPPING
-    const metrics = {
-        discipline: data?.disciplineScore ?? 0,
-        impulsivity: data?.overtradingIndex ?? "0.00",
-        disposition: data?.dispositionRatio ?? "0.00",
-        revenge: data?.revengeRisk ?? 0,
-    };
+export default function BehaviouralFeedbackPanel({ user, trades = [] }) {
+  
+  // --- 1. CLEAN SLATE PROTOCOL ---
+  const hasTrades = trades && trades.length > 0;
 
-    const username = user?.username || 'Trader';
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  // --- 2. CALCULATE METRICS ---
+  let disciplineScore = 100, revengeRisk = 0, impulsivityIndex = 0, dispositionRatio = "0.00", systemIntegrity = 100;
+  let netPnl = 0, winRate = 0;
 
-    // 2. EQUITY CURVE LOGIC
-    const TARGET_PER_TRADE = 50; 
-    const chartData = trades?.length > 0 ? trades
-        .slice()
-        .sort((a, b) => new Date(a.entryTime) - new Date(b.entryTime))
-        .reduce((acc, trade, index) => {
-            const prevActual = index === 0 ? 0 : acc[index - 1].actual;
-            const prevPlan = index === 0 ? 0 : acc[index - 1].planned;
-            acc.push({
-                date: new Date(trade.entryTime).toLocaleDateString(),
-                actual: prevActual + trade.pnl,
-                planned: prevPlan + TARGET_PER_TRADE
-            });
-            return acc;
-        }, []) : [];
+  if (hasTrades) {
+    // A. Discipline (Followed Plan %)
+    const adherentTrades = trades.filter(t => t.followedPlan).length;
+    disciplineScore = Math.round((adherentTrades / trades.length) * 100);
 
-    const isStable = metrics.discipline >= 80;
+    // B. Revenge Risk (Spikes on recent loss)
+    const sortedTrades = [...trades].sort((a, b) => new Date(b.entryTime) - new Date(a.entryTime));
+    const lastTrade = sortedTrades[0];
+    const isRecentLoss = lastTrade && lastTrade.pnl < 0;
+    revengeRisk = isRecentLoss ? 45 : 0; 
 
-    return (
-        <div style={containerStyle}>
-            
-            {/* --- BRAND HEADER & WELCOME --- */}
-            <div style={{ marginBottom: '40px' }}>
-                {/* 1. THE NEW LOGO LOCKUP */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '15px' }}>
-    <div style={{ background: '#0F172A', padding: '10px', borderRadius: '12px', display: 'flex', boxShadow: '0 4px 10px rgba(15, 23, 42, 0.2)' }}>
-        {/* Changed Shield to Brain for "Cognitive" context */}
-        <Brain size={24} color="#3B82F6" />
-    </div>
-    <div>
-        <span style={{ display: 'block', fontSize: '16px', fontWeight: '900', color: '#0F172A', letterSpacing: '2px', lineHeight: '1' }}>COGNITIVE</span>
-        <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#94A3B8', letterSpacing: '3px' }}>FIREWALL</span>
-    </div>
-</div>
+    // C. Impulsivity (Trades vs Limit)
+    const dailyLimit = user?.plannedDailyLimit || 3;
+    const todayStr = new Date().toDateString();
+    const tradesToday = trades.filter(t => new Date(t.entryTime).toDateString() === todayStr).length;
+    impulsivityIndex = (tradesToday / dailyLimit).toFixed(2);
 
-                {/* 2. WELCOME MESSAGE */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                    <div>
-                        <h1 style={{ margin: 0, fontSize: '32px', fontWeight: '900', color: '#0F172A', letterSpacing: '-1px' }}>
-                            Good {new Date().getHours() < 12 ? 'Morning' : 'Afternoon'}, {username}
-                        </h1>
-                        <p style={{ margin: '8px 0 0 0', color: '#64748B', fontSize: '15px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ height: '8px', width: '8px', background: '#10B981', borderRadius: '50%', display: 'inline-block' }}></span>
-                            System Operational • {today}
-                        </p>
-                    </div>
-                    
-                    {/* PRO BADGE */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)', borderRadius: '30px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)' }}>
-                        <Zap size={14} color="#F59E0B" fill="#F59E0B" />
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#FFF', letterSpacing: '0.5px' }}>PRO TIER</span>
-                    </div>
-                </div>
-            </div>
+    // D. Disposition (Avg Win / Avg Loss)
+    const wins = trades.filter(t => t.pnl > 0);
+    const losses = trades.filter(t => t.pnl < 0);
+    const avgWin = wins.length ? wins.reduce((acc, t) => acc + t.pnl, 0) / wins.length : 0;
+    const avgLoss = losses.length ? Math.abs(losses.reduce((acc, t) => acc + t.pnl, 0) / losses.length) : 1; 
+    dispositionRatio = (avgWin / avgLoss).toFixed(2);
 
-            {/* --- SYSTEM INTEGRITY BANNER --- */}
-            <div style={{ 
-                ...statusHeader, 
-                backgroundColor: isStable ? '#10B981' : '#EF4444',
-                boxShadow: isStable ? '0 10px 20px -5px rgba(16, 185, 129, 0.3)' : '0 10px 20px -5px rgba(239, 68, 68, 0.3)'
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                    <ShieldAlert size={32} color="#FFF" />
-                    <div>
-                        <h2 style={headerTitleStyle}>SYSTEM INTEGRITY: {isStable ? 'STABLE' : 'COMPROMISED'}</h2>
-                        <p style={headerSubStyle}>
-                            {isStable ? 'Psychology within parameters. Edge is protected.' : 'High emotional risk detected. Immediate pause recommended.'}
-                        </p>
-                    </div>
-                </div>
-                <div style={headerScoreStyle}>{metrics.discipline}%</div>
-            </div>
+    // E. Extra Info: Net PnL & Win Rate
+    netPnl = trades.reduce((acc, curr) => acc + (Number(curr.pnl) || 0), 0);
+    winRate = Math.round((wins.length / trades.length) * 100);
 
-            {/* --- METRICS GRID --- */}
-            <div style={metricsGrid}>
-                <MetricCard 
-                    icon={<Target size={18} color="#10B981" />} 
-                    label="DISCIPLINE SCORE" 
-                    value={`${metrics.discipline}%`} 
-                    desc="Plan adherence rate"
-                    progress={metrics.discipline}
-                />
-                <MetricCard 
-                    icon={<Activity size={18} color="#3B82F6" />} 
-                    label="IMPULSIVITY INDEX" 
-                    value={`${metrics.impulsivity}x`} 
-                    desc="Daily limit utilization"
-                />
-                <MetricCard 
-                    icon={<Brain size={18} color="#F59E0B" />} 
-                    label="REVENGE RISK" 
-                    value={`${metrics.revenge}%`} 
-                    desc="Tilt probability"
-                    color={metrics.revenge > 20 ? '#EF4444' : '#1E293B'}
-                />
-                <MetricCard 
-                    icon={<TrendingUp size={18} color="#8B5CF6" />} 
-                    label="DISPOSITION RATIO" 
-                    value={metrics.disposition} 
-                    desc="Avg Win / Avg Loss"
-                />
-            </div>
+    // F. System Integrity (Average of Discipline & (100 - Risk))
+    systemIntegrity = Math.round((disciplineScore + (100 - revengeRisk)) / 2);
+  }
 
-            {/* --- ACTIVITY & CHARTS --- */}
-            <div style={bottomSection}>
-                <div style={journalPreviewCard}>
-                    <div style={cardHeaderStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <Clock size={18} color="#64748B" />
-                            <h3 style={labelStyle}>RECENT ACTIVITY</h3>
-                        </div>
-                        <span style={entryCountStyle}>{trades?.length || 0} Total Entries</span>
-                    </div>
-                    
-                    <div style={tableWrapper}>
-                        {(!trades || trades.length === 0) ? (
-                            <div style={emptyStateStyle}>No recent trades detected.</div>
-                        ) : (
-                            trades.slice(0, 5).map((trade, i) => (
-                                <div key={i} style={tradeRowStyle}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 2 }}>
-                                        <div style={{ 
-                                            ...sideBadge, 
-                                            backgroundColor: trade.direction === 'buy' ? '#ECFDF5' : '#FEF2F2',
-                                            color: trade.direction === 'buy' ? '#10B981' : '#EF4444'
-                                        }}>
-                                            {trade.direction?.toUpperCase()}
-                                        </div>
-                                        <span style={instrumentStyle}>{trade.instrument}</span>
-                                    </div>
-                                    <div style={{ flex: 1, color: '#64748B', fontSize: '12px' }}>
-                                        {new Date(trade.entryTime).toLocaleDateString()}
-                                    </div>
-                                    <div style={{ 
-                                        flex: 1, 
-                                        fontWeight: '800', 
-                                        textAlign: 'right',
-                                        color: trade.pnl >= 0 ? '#10B981' : '#EF4444'
-                                    }}>
-                                        {trade.pnl >= 0 ? '+' : ''}${trade.pnl}
-                                    </div>
-                                    <ChevronRight size={16} color="#CBD5E1" style={{ marginLeft: '10px' }} />
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </div>
+  // --- 3. CHART DATA GENERATION ---
+  const chartData = hasTrades ? trades.map((t, i) => ({
+    name: `Trade ${i + 1}`,
+    cumulative: trades.slice(0, i + 1).reduce((acc, curr) => acc + (Number(curr.pnl) || 0), 0)
+  })) : [];
 
-                <div style={miniChartCard}>
-                    <h3 style={labelStyle}>EQUITY CURVE vs PLAN</h3>
-                    <div style={{ height: '250px', marginTop: '15px', width: '100%' }}>
-                        {chartData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={chartData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="date" hide />
-                                    <YAxis fontSize={10} fontWeight={700} tickFormatter={(val) => `$${val}`} stroke="#94a3b8" width={40}/>
-                                    <Tooltip 
-                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                        formatter={(val, name) => [`$${val}`, name === 'actual' ? 'Actual Equity' : 'Planned Target']}
-                                    />
-                                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}/>
-                                    <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="3 3" />
-                                    <Line type="monotone" dataKey="planned" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Plan"/>
-                                    <Line type="monotone" dataKey="actual" stroke="#3B82F6" strokeWidth={3} dot={{ r: 0 }} activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }} name="Actual"/>
-                                </LineChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div style={chartPlaceholder}>
-                                <p style={{ color: '#94A3B8', fontSize: '12px' }}>Insufficient data to plot curve...</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+  // --- 4. DYNAMIC STYLING ---
+  const isOptimal = systemIntegrity >= 70;
+  const integrityColor = isOptimal ? 'var(--primary)' : 'var(--danger)';
+  const integrityLabel = isOptimal ? 'SYSTEM INTEGRITY: OPERATIONAL' : 'SYSTEM INTEGRITY: COMPROMISED';
+
+  return (
+    <PageWrapper>
+      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        
+        {/* HEADER SECTION */}
+        <div style={{ marginBottom: '32px' }}>
+          <h1 style={{ fontSize: '32px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 8px 0' }}>
+            Good Afternoon, {user?.username || 'Trader'}
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: integrityColor }}></div>
+            <span>System Operational • {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+          </div>
         </div>
-    );
+
+        {/* HERO BANNER - SYSTEM INTEGRITY */}
+        <div className="card" style={{ 
+          background: isOptimal ? 'rgba(54, 179, 126, 0.1)' : 'rgba(255, 86, 48, 0.1)', 
+          border: `1px solid ${integrityColor}`, 
+          marginBottom: '32px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ background: integrityColor, color: 'white', padding: '12px', borderRadius: '12px' }}>
+              {isOptimal ? <ShieldCheck size={32} /> : <AlertTriangle size={32} />}
+            </div>
+            <div>
+              <h2 style={{ fontSize: '20px', fontWeight: '900', margin: 0, color: integrityColor, letterSpacing: '1px' }}>{integrityLabel}</h2>
+              <p style={{ margin: '4px 0 0 0', color: 'var(--text-main)', fontSize: '14px', fontWeight: '500' }}>
+                {isOptimal ? "Cognitive state optimal. Execution protocols active." : "High emotional risk detected. Immediate pause recommended."}
+              </p>
+            </div>
+          </div>
+          <div style={{ fontSize: '48px', fontWeight: '900', color: integrityColor }}>{systemIntegrity}%</div>
+        </div>
+
+        {/* METRICS GRID (Top Row - Behavioral) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px', marginBottom: '24px' }}>
+          <MetricCard title="DISCIPLINE SCORE" value={`${disciplineScore}%`} sub="Plan adherence rate" icon={<Target size={18} />} color="var(--primary)" />
+          <MetricCard title="IMPULSIVITY INDEX" value={`${impulsivityIndex}x`} sub="Daily limit utilization" icon={<Activity size={18} />} color="#0052CC" />
+          <MetricCard title="REVENGE RISK" value={`${revengeRisk}%`} sub="Tilt probability" icon={<Brain size={18} />} color={revengeRisk > 50 ? "var(--danger)" : "var(--warning)"} />
+          <MetricCard title="DISPOSITION RATIO" value={dispositionRatio} sub="Avg Win / Avg Loss" icon={<TrendingUp size={18} />} color="#6554C0" />
+        </div>
+
+        {/* EXTRA INFO GRID (Bottom Row - Financial) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '32px' }}>
+          <MetricCard title="NET PROFIT / LOSS" value={`$${netPnl.toFixed(2)}`} sub="Total cumulative outcome" icon={<DollarSign size={18} />} color={netPnl >= 0 ? "var(--primary)" : "var(--danger)"} />
+          <MetricCard title="WIN RATE" value={`${winRate}%`} sub="Overall trade success" icon={<Percent size={18} />} color="#0052CC" />
+        </div>
+
+        {/* BOTTOM SECTION: CHART & LIST */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+          
+          {/* Equity Curve Chart */}
+          <div className="card" style={{ minHeight: '350px', display: 'flex', flexDirection: 'column' }}>
+            <div className="card-header">
+              <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><TrendingUp size={16} color="var(--text-muted)" /> EQUITY CURVE</span>
+            </div>
+            <div style={{ flexGrow: 1, width: '100%', height: '280px' }}>
+              {!hasTrades ? (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>No data to plot.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="name" tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
+                    <YAxis tick={{fontSize: 12, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--shadow)' }} />
+                    <Line type="monotone" dataKey="cumulative" stroke="#0052CC" strokeWidth={4} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 8 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Activity List */}
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', maxHeight: '400px', overflowY: 'auto' }}>
+            <div className="card-header">
+              <span className="card-title">RECENT ACTIVITY</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', background: 'var(--background)', color: 'var(--text-main)', padding: '4px 8px', borderRadius: '6px' }}>{trades.length} Entries</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {!hasTrades ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0', fontStyle: 'italic', fontSize: '14px' }}>No recent trades.</div>
+              ) : (
+                trades.slice().reverse().slice(0, 5).map((t, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: i === 4 ? 'none' : '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ 
+                        fontSize: '10px', fontWeight: '800', 
+                        background: t.direction === 'buy' || t.direction === 'Long' ? '#ECFDF5' : '#FEF2F2', 
+                        color: t.direction === 'buy' || t.direction === 'Long' ? '#059669' : '#DC2626',
+                        padding: '4px 8px', borderRadius: '4px', textTransform: 'uppercase' 
+                      }}>
+                        {t.direction}
+                      </span>
+                      <span style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>{t.instrument}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <span style={{ fontWeight: '800', fontSize: '14px', color: t.pnl > 0 ? 'var(--primary)' : 'var(--danger)' }}>
+                        {t.pnl > 0 ? '+' : ''}${t.pnl}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </PageWrapper>
+  );
 }
 
-// --- SUB-COMPONENTS & STYLES ---
-function MetricCard({ icon, label, value, desc, progress, color }) {
-    return (
-        <div style={cardStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                {icon}
-                <span style={labelStyle}>{label}</span>
-            </div>
-            <div style={{ ...valueStyle, color: color || '#1E293B' }}>{value}</div>
-            {progress !== undefined && (
-                <div style={progressBg}>
-                    <div style={{ ...progressFill, width: `${progress}%` }}></div>
-                </div>
-            )}
-            <p style={descStyle}>{desc}</p>
-        </div>
-    );
-}
-// --- STYLES ---
-const containerStyle = { padding: '30px', maxWidth: '1200px', margin: '0 auto' };
-const statusHeader = { padding: '30px', borderRadius: '16px', color: '#FFF', marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' };
-const headerTitleStyle = { margin: 0, fontSize: '22px', fontWeight: '900', letterSpacing: '1.5px' };
-const headerSubStyle = { margin: '5px 0 0 0', fontSize: '14px', opacity: 0.8, fontWeight: '500' };
-const headerScoreStyle = { fontSize: '42px', fontWeight: '900', opacity: 0.9 };
-
-const metricsGrid = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' };
-const cardStyle = { background: '#FFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' };
-const labelStyle = { fontSize: '11px', fontWeight: '800', color: '#64748B', letterSpacing: '1px' };
-const valueStyle = { fontSize: '32px', fontWeight: '900', marginBottom: '8px' };
-const descStyle = { fontSize: '12px', color: '#94A3B8', margin: 0, fontWeight: '500' };
-const progressBg = { height: '6px', background: '#F1F5F9', borderRadius: '10px', marginBottom: '10px', overflow: 'hidden' };
-const progressFill = { height: '100%', background: '#10B981', borderRadius: '10px' };
-
-const bottomSection = { display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '25px' };
-const journalPreviewCard = { background: '#FFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '24px' };
-const cardHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #F1F5F9', paddingBottom: '15px' };
-const entryCountStyle = { fontSize: '12px', fontWeight: '700', color: '#94A3B8', background: '#F8FAFC', padding: '4px 10px', borderRadius: '20px' };
-const tableWrapper = { display: 'flex', flexDirection: 'column' };
-const tradeRowStyle = { display: 'flex', alignItems: 'center', padding: '15px 0', borderBottom: '1px solid #F8FAFC', transition: 'all 0.2s' };
-const instrumentStyle = { fontWeight: '700', color: '#1E293B', fontSize: '14px' };
-const sideBadge = { padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '800' };
-const emptyStateStyle = { textAlign: 'center', padding: '40px', color: '#CBD5E1', fontSize: '14px', fontStyle: 'italic' };
-
-const miniChartCard = { background: '#FFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '24px' };
-const chartPlaceholder = { height: '220px', background: '#F8FAFC', border: '1px dashed #E2E8F0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '15px' };
+// Sub-component for consistent cards
+const MetricCard = ({ title, value, sub, icon, color }) => (
+  <div className="card" style={{ borderBottom: `4px solid ${color}`, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+      <div style={{ color: color }}>{icon}</div>
+      <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', letterSpacing: '1px' }}>{title}</span>
+    </div>
+    <div className="big-metric" style={{ fontSize: '32px' }}>{value}</div>
+    <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: 'auto' }}>{sub}</div>
+  </div>
+);

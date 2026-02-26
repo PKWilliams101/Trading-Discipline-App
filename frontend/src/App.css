@@ -1,5 +1,5 @@
 :root {
-  /* FIGMA PALETTE */
+  /*PALETTE */
   --primary: #36B37E;       /* The Green */
   --primary-dark: #2B8F65;
   --danger: #FF5630;        /* The Red */
@@ -132,6 +132,7 @@ body {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(9, 30, 66, 0.54); /* Dark blue tint */
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Lock, LockOpen, AlertTriangle, ShieldCheck, Settings2, Hash, Activity } from 'lucide-react';
 import axios from 'axios';
+import PageWrapper from './PageWrapper';
 
 export default function StrategySettings({ user, onUpdate }) {
   const [isLocked, setIsLocked] = useState(true);
   const [rules, setRules] = useState([]);
-  const [dailyLimit, setDailyLimit] = useState(3); // New State for Trade Limit
+  const [dailyLimit, setDailyLimit] = useState(3);
   const [loading, setLoading] = useState(false);
   
   // Terminal State
@@ -16,10 +17,8 @@ export default function StrategySettings({ user, onUpdate }) {
   // 1. INITIALIZE DATA FROM USER PROFILE
   useEffect(() => {
     if (user) {
-      // Sync Limit
       setDailyLimit(user.plannedDailyLimit || 3);
 
-      // Sync Rules
       if (user.tradingPlanRules) {
         const parsed = user.tradingPlanRules.map((r, i) => {
           const isHard = r.startsWith('[HARD]');
@@ -58,201 +57,201 @@ export default function StrategySettings({ user, onUpdate }) {
     setRules(prev => prev.filter(r => r.id !== id));
   };
 
-  // 3. SAVE LOGIC (Includes Daily Limit now)
+  // 3. SAVE LOGIC
   const handleSave = async () => {
-  setLoading(true);
-  try {
-    // We map the rules back to simple strings for the database
-    const ruleStrings = rules.map(r => r.fullString);
-    
-    console.log("📡 Sending Update to:", `http://localhost:5000/api/users/${user._id}`);
+    setLoading(true);
+    try {
+      const ruleStrings = rules.map(r => r.fullString);
+      const res = await axios.put(`http://localhost:5000/api/users/${user._id}`, {
+        tradingPlanRules: ruleStrings,
+        plannedDailyLimit: parseInt(dailyLimit)
+      });
 
-    const res = await axios.put(`http://localhost:5000/api/users/${user._id}`, {
-      tradingPlanRules: ruleStrings,
-      plannedDailyLimit: parseInt(dailyLimit)
-    });
-
-    // Update the app state and storage
-    onUpdate(res.data);
-    localStorage.setItem('user', JSON.stringify(res.data));
-    
-    setIsLocked(true);
-    alert("✅ Protocols Updated: Risk Limits Enforced.");
-  } catch (err) {
-    console.error("Save Error:", err.response || err);
-    alert(`System Sync Failed: ${err.response?.status || 'Check Connection'}`);
-  } finally {
-    setLoading(false);
-  }
-};
+      onUpdate(res.data);
+      localStorage.setItem('user', JSON.stringify(res.data));
+      
+      setIsLocked(true);
+      alert("✅ Protocols Updated: Risk Limits Enforced.");
+    } catch (err) {
+      console.error("Save Error:", err.response || err);
+      alert(`System Sync Failed: ${err.response?.status || 'Check Connection'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div style={layoutContainer}>
+    <PageWrapper>
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '20px 0' }}>
       
-      {/* --- INDUSTRIAL STATUS BANNER --- */}
-      <div style={{ 
-        ...statusBanner, 
-        backgroundColor: isLocked ? '#0F172A' : '#FFFFFF',
-        color: isLocked ? '#F8FAFC' : '#0F172A',
-        border: isLocked ? 'none' : '2px solid #E2E8F0'
-      }}>
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-          <div style={{ ...statusIconBox, backgroundColor: isLocked ? '#1E293B' : '#F1F5F9' }}>
-            {isLocked ? <Lock size={20} color="#10B981" /> : <LockOpen size={20} color="#F59E0B" />}
+        {/* --- INDUSTRIAL STATUS BANNER --- */}
+        <div className="card" style={{ 
+          backgroundColor: isLocked ? 'var(--text-main)' : 'var(--surface)',
+          color: isLocked ? 'var(--surface)' : 'var(--text-main)',
+          border: isLocked ? 'none' : '2px solid var(--border)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px'
+        }}>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div style={{ padding: '15px', borderRadius: '12px', backgroundColor: isLocked ? 'rgba(255,255,255,0.1)' : 'var(--background)' }}>
+              {isLocked ? <Lock size={24} color="var(--primary)" /> : <LockOpen size={24} color="var(--warning)" />}
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '2px', opacity: 0.7 }}>STRATEGY STATUS</div>
+              <div style={{ fontSize: '20px', fontWeight: '900' }}>{isLocked ? 'ACTIVE & ENFORCED' : 'CONFIGURATION MODE'}</div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '2px', opacity: 0.6 }}>STRATEGY STATUS</div>
-            <div style={{ fontSize: '18px', fontWeight: '900' }}>{isLocked ? 'ACTIVE & ENFORCED' : 'CONFIGURATION MODE'}</div>
+          <button 
+            onClick={isLocked ? () => setIsLocked(false) : handleSave}
+            className="btn"
+            style={{ 
+              backgroundColor: isLocked ? 'var(--primary)' : 'var(--text-main)', 
+              color: 'white', 
+              padding: '14px 28px', 
+              fontSize: '13px', 
+              letterSpacing: '1px' 
+            }}
+          >
+            {loading ? 'SYNCING...' : isLocked ? 'UNLOCK PARAMETERS' : 'SEAL & DEPLOY'}
+          </button>
+        </div>
+
+        {/* --- RISK CONFIGURATION SECTION --- */}
+        <div className="card" style={{ marginBottom: '30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+            <div style={{ background: 'rgba(255, 86, 48, 0.1)', padding: '12px', borderRadius: '10px' }}>
+              <Activity size={24} color="var(--danger)" />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '900', letterSpacing: '1px', color: 'var(--text-main)' }}>MAXIMUM DAILY TRADES</h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
+                Hard stop trigger for Impulsivity Index.
+              </p>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <button 
+              disabled={isLocked || dailyLimit <= 1} 
+              onClick={() => setDailyLimit(prev => prev - 1)}
+              style={counterBtn(isLocked)}
+            >-</button>
+            <div style={{ width: '40px', textAlign: 'center', fontSize: '28px', fontWeight: '900', color: 'var(--text-main)' }}>
+              {dailyLimit}
+            </div>
+            <button 
+              disabled={isLocked} 
+              onClick={() => setDailyLimit(prev => parseInt(prev) + 1)}
+              style={counterBtn(isLocked)}
+            >+</button>
           </div>
         </div>
-        <button 
-          onClick={isLocked ? () => setIsLocked(false) : handleSave}
-          style={{ ...actionBtn, backgroundColor: isLocked ? '#10B981' : '#0F172A', color: '#FFF' }}
-        >
-          {loading ? 'SYNCING...' : isLocked ? 'UNLOCK PARAMETERS' : 'SEAL & DEPLOY'}
-        </button>
-      </div>
 
-      {/* --- NEW: RISK CONFIGURATION SECTION --- */}
-      <div style={{ marginBottom: '30px' }}>
-        <div style={riskCard}>
-           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                 <Activity size={24} color="#EF4444" />
-                 <div>
-                    <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '900', letterSpacing: '1px', color: '#0F172A' }}>MAXIMUM DAILY TRADES</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
-                       Hard stop trigger for Impulsivity Index.
-                    </p>
-                 </div>
-              </div>
-              
+        {/* --- RULES GRID --- */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
+          
+          {/* SYSTEM CRITICAL (HARD) RULES */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={sectionHeader}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                 <button 
-                    disabled={isLocked || dailyLimit <= 1} 
-                    onClick={() => setDailyLimit(prev => prev - 1)}
-                    style={counterBtn}
-                 >-</button>
-                 <div style={counterDisplay}>
-                    {dailyLimit}
-                 </div>
-                 <button 
-                    disabled={isLocked} 
-                    onClick={() => setDailyLimit(prev => parseInt(prev) + 1)}
-                    style={counterBtn}
-                 >+</button>
+                <AlertTriangle size={18} color="var(--danger)" />
+                <span style={headerText}>SYSTEM CRITICAL (HARD)</span>
               </div>
-           </div>
-        </div>
-      </div>
-
-      <div style={dualGrid}>
-        {/* --- SYSTEM CRITICAL (HARD) RULES --- */}
-        <div style={sectionCard}>
-          <div style={sectionHeader}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <AlertTriangle size={18} color="#EF4444" />
-              <span style={headerText}>SYSTEM CRITICAL (HARD)</span>
+              <div style={ruleCounter}>{rules.filter(r => r.category === 'hard').length}</div>
             </div>
-            <div style={ruleCounter}>{rules.filter(r => r.category === 'hard').length}</div>
-          </div>
-          <div style={ruleScrollArea}>
-            {rules.filter(r => r.category === 'hard').map(rule => (
-              <div key={rule.id} style={hardRuleItem}>
-                <div style={ruleContent}>
-                  <Hash size={14} style={{ opacity: 0.3 }} />
-                  <span style={{ fontWeight: '700' }}>{rule.label}</span>
+            <div style={ruleScrollArea}>
+              {rules.filter(r => r.category === 'hard').map(rule => (
+                <div key={rule.id} style={hardRuleItem}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <Hash size={14} style={{ opacity: 0.5 }} />
+                    <span style={{ fontWeight: '700' }}>{rule.label}</span>
+                  </div>
+                  {!isLocked && <Trash2 size={16} style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => handleRemoveRule(rule.id)} />}
                 </div>
-                {!isLocked && <Trash2 size={16} style={deleteIcon} onClick={() => handleRemoveRule(rule.id)} />}
-              </div>
-            ))}
-            {rules.filter(r => r.category === 'hard').length === 0 && <div style={emptyState}>NO CRITICAL CONSTRAINTS LOADED</div>}
-          </div>
-        </div>
-
-        {/* --- OPERATIONAL (SOFT) GUIDELINES --- */}
-        <div style={sectionCard}>
-          <div style={sectionHeader}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Settings2 size={18} color="#3B82F6" />
-              <span style={headerText}>OPERATIONAL (SOFT)</span>
+              ))}
+              {rules.filter(r => r.category === 'hard').length === 0 && <div style={emptyState}>NO CRITICAL CONSTRAINTS LOADED</div>}
             </div>
-            <div style={ruleCounter}>{rules.filter(r => r.category === 'soft').length}</div>
           </div>
-          <div style={ruleScrollArea}>
-            {rules.filter(r => r.category === 'soft').map(rule => (
-              <div key={rule.id} style={softRuleItem}>
-                <div style={ruleContent}>
-                  <div style={softBullet}></div>
-                  <span>{rule.label}</span>
+
+          {/* OPERATIONAL (SOFT) GUIDELINES */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={sectionHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Settings2 size={18} color="#0052CC" />
+                <span style={headerText}>OPERATIONAL (SOFT)</span>
+              </div>
+              <div style={ruleCounter}>{rules.filter(r => r.category === 'soft').length}</div>
+            </div>
+            <div style={ruleScrollArea}>
+              {rules.filter(r => r.category === 'soft').map(rule => (
+                <div key={rule.id} style={softRuleItem}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ height: '6px', width: '6px', borderRadius: '50%', background: '#0052CC' }}></div>
+                    <span style={{ fontWeight: '600' }}>{rule.label}</span>
+                  </div>
+                  {!isLocked && <Trash2 size={16} style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => handleRemoveRule(rule.id)} />}
                 </div>
-                {!isLocked && <Trash2 size={16} style={deleteIcon} onClick={() => handleRemoveRule(rule.id)} />}
-              </div>
-            ))}
-            {rules.filter(r => r.category === 'soft').length === 0 && <div style={emptyState}>NO GUIDELINES LOADED</div>}
+              ))}
+              {rules.filter(r => r.category === 'soft').length === 0 && <div style={emptyState}>NO GUIDELINES LOADED</div>}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* --- COMMAND INPUT TERMINAL --- */}
-      {!isLocked && (
-        <div style={terminalCard}>
-          <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Plus size={20} color="#0F172A" />
-            <span style={{ fontWeight: '900', fontSize: '14px', letterSpacing: '1px' }}>RULE BUILDER TERMINAL</span>
-          </div>
-          <div style={terminalGrid}>
-            <div style={{ flex: 2 }}>
-              <label style={terminalLabel}>PARAMETER NAME</label>
-              <input style={terminalInput} placeholder="e.g. LIQUIDITY DRAW" value={ruleName} onChange={e => setRuleName(e.target.value)} />
+        {/* --- COMMAND INPUT TERMINAL --- */}
+        {!isLocked && (
+          <div className="card" style={{ background: 'var(--background)', border: '2px dashed var(--border)' }}>
+            <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Plus size={20} color="var(--text-main)" />
+              <span style={{ fontWeight: '900', fontSize: '15px', letterSpacing: '1px', color: 'var(--text-main)' }}>RULE BUILDER TERMINAL</span>
             </div>
-            <div style={{ flex: 2 }}>
-              <label style={terminalLabel}>EXPECTED CONDITION</label>
-              <input style={terminalInput} placeholder="e.g. DAILY HIGH SWEPT" value={ruleValue} onChange={e => setRuleValue(e.target.value)} />
-            </div>
-            <div style={{ flex: 1.2 }}>
-              <label style={terminalLabel}>ENFORCEMENT LEVEL</label>
-              <div style={modeToggle}>
-                <button onClick={() => setRuleCategory('soft')} style={ruleCategory === 'soft' ? activeMode('#3B82F6') : inactiveMode}>SOFT</button>
-                <button onClick={() => setRuleCategory('hard')} style={ruleCategory === 'hard' ? activeMode('#EF4444') : inactiveMode}>HARD</button>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
+              <div style={{ flex: 2 }}>
+                <label style={terminalLabel}>PARAMETER NAME</label>
+                <input style={terminalInput} placeholder="e.g. LIQUIDITY DRAW" value={ruleName} onChange={e => setRuleName(e.target.value)} />
               </div>
+              <div style={{ flex: 2 }}>
+                <label style={terminalLabel}>EXPECTED CONDITION</label>
+                <input style={terminalInput} placeholder="e.g. DAILY HIGH SWEPT" value={ruleValue} onChange={e => setRuleValue(e.target.value)} />
+              </div>
+              <div style={{ flex: 1.2 }}>
+                <label style={terminalLabel}>ENFORCEMENT LEVEL</label>
+                <div style={modeToggle}>
+                  <button onClick={() => setRuleCategory('soft')} style={ruleCategory === 'soft' ? activeMode('#0052CC') : inactiveMode}>SOFT</button>
+                  <button onClick={() => setRuleCategory('hard')} style={ruleCategory === 'hard' ? activeMode('var(--danger)') : inactiveMode}>HARD</button>
+                </div>
+              </div>
+              <button className="btn" style={terminalAddBtn} onClick={handleAddRule}>INITIALIZE RULE</button>
             </div>
-            <button style={terminalAddBtn} onClick={handleAddRule}>INITIALIZE RULE</button>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </PageWrapper>
   );
 }
 
-// --- INDUSTRIAL DESIGN SYSTEM STYLES ---
-const layoutContainer = { maxWidth: '1100px', margin: '0 auto', padding: '40px 20px' };
-const statusBanner = { borderRadius: '12px', padding: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' };
-const statusIconBox = { padding: '15px', borderRadius: '12px' };
-const actionBtn = { border: 'none', padding: '14px 28px', borderRadius: '8px', fontWeight: '900', fontSize: '12px', letterSpacing: '1px', cursor: 'pointer', transition: 'transform 0.1s' };
+// --- DYNAMIC INLINE STYLES (Using CSS Variables) ---
+const counterBtn = (isLocked) => ({
+  width: '45px', height: '45px', borderRadius: '8px', 
+  border: `1px solid var(--border)`, 
+  background: 'var(--background)', 
+  cursor: isLocked ? 'not-allowed' : 'pointer', 
+  fontSize: '20px', fontWeight: '700', 
+  color: 'var(--text-main)',
+  opacity: isLocked ? 0.5 : 1
+});
 
-// Risk Section Styles
-const riskCard = { background: '#FFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '25px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' };
-const counterBtn = { width: '40px', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', fontSize: '18px', fontWeight: '700', color: '#64748B' };
-const counterDisplay = { width: '60px', textAlign: 'center', fontSize: '24px', fontWeight: '900', color: '#0F172A' };
+const sectionHeader = { padding: '20px 25px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--background)' };
+const headerText = { fontWeight: '900', fontSize: '13px', letterSpacing: '1px', color: 'var(--text-main)' };
+const ruleCounter = { background: 'var(--text-main)', color: 'white', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '900' };
+const ruleScrollArea = { padding: '20px', minHeight: '220px', flexGrow: 1 };
 
-const dualGrid = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '40px' };
-const sectionCard = { background: '#FFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' };
-const sectionHeader = { padding: '20px 25px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' };
-const headerText = { fontWeight: '900', fontSize: '12px', letterSpacing: '1px', color: '#475569' };
-const ruleCounter = { background: '#0F172A', color: '#FFF', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '900' };
-const ruleScrollArea = { padding: '20px', minHeight: '220px' };
-const hardRuleItem = { display: 'flex', justifyContent: 'space-between', padding: '15px', background: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: '8px', marginBottom: '10px', fontSize: '13px', color: '#991B1B' };
-const softRuleItem = { display: 'flex', justifyContent: 'space-between', padding: '15px', background: '#EFF6FF', border: '1px solid #DBEAFE', borderRadius: '8px', marginBottom: '10px', fontSize: '13px', color: '#1E40AF' };
-const ruleContent = { display: 'flex', alignItems: 'center', gap: '12px' };
-const softBullet = { height: '6px', width: '6px', borderRadius: '50%', background: '#3B82F6' };
-const deleteIcon = { cursor: 'pointer', opacity: 0.5, transition: 'opacity 0.2s' };
-const emptyState = { textAlign: 'center', color: '#94A3B8', fontSize: '12px', fontWeight: '600', marginTop: '80px', letterSpacing: '1px' };
-const terminalCard = { background: '#F1F5F9', padding: '40px', borderRadius: '16px', border: '2px solid #E2E8F0' };
-const terminalGrid = { display: 'flex', gap: '20px', alignItems: 'flex-end' };
-const terminalLabel = { display: 'block', fontSize: '10px', fontWeight: '900', color: '#64748B', marginBottom: '10px', letterSpacing: '1.5px' };
-const terminalInput = { width: '100%', padding: '14px', borderRadius: '8px', border: '2px solid #CBD5E1', fontSize: '13px', fontWeight: '600', outline: 'none', backgroundColor: '#FFF' };
-const modeToggle = { display: 'flex', background: '#CBD5E1', borderRadius: '8px', padding: '4px' };
-const activeMode = (color) => ({ flex: 1, border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '900', backgroundColor: color, color: '#FFF' });
-const inactiveMode = { flex: 1, border: 'none', padding: '10px', background: 'transparent', cursor: 'pointer', fontSize: '11px', fontWeight: '800', color: '#475569' };
-const terminalAddBtn = { background: '#0F172A', color: '#FFF', border: 'none', padding: '14px 25px', borderRadius: '8px', fontWeight: '900', fontSize: '12px', cursor: 'pointer' };
+const hardRuleItem = { display: 'flex', justifyContent: 'space-between', padding: '15px', background: 'rgba(255, 86, 48, 0.05)', border: '1px solid rgba(255, 86, 48, 0.2)', borderRadius: '8px', marginBottom: '10px', fontSize: '13px', color: 'var(--danger)' };
+const softRuleItem = { display: 'flex', justifyContent: 'space-between', padding: '15px', background: 'rgba(0, 82, 204, 0.05)', border: '1px solid rgba(0, 82, 204, 0.2)', borderRadius: '8px', marginBottom: '10px', fontSize: '13px', color: '#0052CC' };
+
+const emptyState = { textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', fontWeight: '600', marginTop: '80px', letterSpacing: '1px' };
+
+const terminalLabel = { display: 'block', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', marginBottom: '10px', letterSpacing: '1px' };
+const terminalInput = { width: '100%', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '14px', fontWeight: '600', outline: 'none', backgroundColor: 'var(--surface)', color: 'var(--text-main)' };
+const modeToggle = { display: 'flex', background: 'var(--background)', borderRadius: '8px', padding: '4px', border: '1px solid var(--border)' };
+const activeMode = (color) => ({ flex: 1, border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '900', backgroundColor: color, color: '#FFF' });
+const inactiveMode = { flex: 1, border: 'none', padding: '10px', background: 'transparent', cursor: 'pointer', fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)' };
+const terminalAddBtn = { backgroundColor: 'var(--text-main)', color: 'white', padding: '14px 25px', borderRadius: '8px', fontWeight: '900', fontSize: '13px', letterSpacing: '1px' };
